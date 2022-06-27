@@ -1,13 +1,13 @@
 # nextcloud-dev-docker-compose
 
-Nextcloud development environment using docker-compose
+Nextcloud development environment using docker-compose for the [VO Federation app](https://github.com/nextcloud/vo_federation).
 
 ⚠ **DO NOT USE THIS IN PRODUCTION** Various settings in this setup are considered insecure and default passwords and secrets are used all over the place
 
 Features
 
 - ☁ Nextcloud
-- 🔒 Nginx proxy with SSL termination
+- 🔒 Nginx proxy with (local) SSL termination
 - 💾 MySQL
 - 💡 Redis
 - 👥 LDAP with example user data
@@ -17,30 +17,50 @@ Features
 
 ## Getting started
 
-To get the setup running:
+Please follow the instructions to get the setup running. In the end the directory structure should look like this:
 
 ```
-git clone https://github.com/juliushaertl/nextcloud-docker-dev
-cd nextcloud-docker-dev
-./bootstrap.sh
-sudo sh -c "echo '127.0.0.1 nextcloud.local' >> /etc/hosts"
-docker-compose up nextcloud proxy
+/home/ksandar/spaces/publicplan/Entwicklung/
+├── nextcloud-docker-dev
+├── nextcloud-server
+└── vo_federation
 ```
 
-## Manual setup
+Make sure you have `docker`, `docker-compose` and `git` working properly on your system before continuing.
 
 ### Nextcloud Code
 
-The Nextcloud code base needs to be available including the `3rdparty` submodule. To clone it from github run:
+Start by checking out this repository in your project home:
 
 ```
-git clone https://github.com/nextcloud/server.git
-cd server
+git clone https://github.com/smesterheide/nextcloud-docker-dev
+```
+
+Your default branch should be called `app/vo-federation`.
+
+The Nextcloud code base needs to be available including the `3rdparty` submodule. To clone it from GitHub run:
+
+```
+git clone https://github.com/nextcloud/server.git nextcloud-server
+cd nextcloud-server
 git submodule update --init
 pwd
 ```
 The last command prints the path to the Nextcloud server directory.
 Use it for setting the `REPO_PATH_SERVER` in the next step.
+
+Beware that you might need to add other *remote* repositories for the Nextcloud server depending on the current state of core development. Support for VO Federation is subject to acceptance of pull requests. To add the development branch `vo-federation-features` for the Nextcloud server:
+
+```
+git remote add smesterheide https://github.com/smesterheide/nextcloud-server.git
+git fetch smesterheide
+git checkout -t smesterheide/vo-federation-features
+```
+
+Lastly from your project home add the `vo_federation` app repository:
+```
+git clone https://github.com/nextcloud/vo_federation
+```
 
 ### Environment variables
 
@@ -50,11 +70,17 @@ A `.env` file should be created in the repository root, to keep configuration de
 cp example.env .env
 ```
 
-Replace `REPO_PATH_SERVER` with the path from above.
+The default configuration was slightly changed for the VO Federation app. Compare with upstream [example.env](https://github.com/juliushaertl/nextcloud-docker-dev/blob/master/example.env) and [bootstrap.sh](https://github.com/juliushaertl/nextcloud-docker-dev/blob/master/bootstrap.sh#L78).
+
+* Replace `REPO_PATH_SERVER` with the path from above.
+* Replace `ADDITIONAL_APPS_PATH` relative to `REPO_PATH_SERVER`
+* Replace `STABLE_ROOT_PATH` with your project home
+
+* Replace `VO_APP_PATH` with the VO Federation app directory
 
 ### Setting the PHP version to be used
 
-The Nextcloud instance is setup to run with PHP 7.2 by default.
+The Nextcloud instance is setup to run with PHP 7.4 by default.
 If you wish to use a different version of PHP, set the `PHP_VERSION` `.env` variable.
 
 The variable supports the following values:
@@ -65,12 +91,22 @@ The variable supports the following values:
 1. PHP 7.4: `74`
 1. PHP 8.0: `80`
 
+### Installing additional apps (optional)
+
+```
+mkdir -p nextcloud-server/apps-extra
+git clone https://github.com/nextcloud/viewer.git nextcloud-server/apps-extra/viewer
+git clone https://github.com/nextcloud/recommendations.git nextcloud-server/apps-extra/recommendations
+git clone https://github.com/nextcloud/files_pdfviewer.git nextcloud-server/apps-extra/files_pdfviewer
+git clone https://github.com/nextcloud/profiler.git nextcloud-server/apps-extra/profiler
+```
+
 ### Starting the containers
 
 - Start full setup: `docker-compose up`
 - Minimum: `docker-compose up proxy nextcloud` (nextcloud mysql redis mailhog)
 
-### Running stable versions
+### Running stable versions (kept for reference - please read)
 
 The docker-compose file provides individual containers for stable Nextcloud releases. In order to run those you will need a checkout of the stable version server branch to your workspace directory. Using [git worktree](https://blog.juliushaertl.de/index.php/2018/01/24/how-to-checkout-multiple-git-branches-at-the-same-time/) makes it easy to have different branches checked out in parallel in separate directories.
 
@@ -96,9 +132,22 @@ If your setup isn't working and you can not figure out the reason why, running
 `docker-compose down -v` will remove the relevant containers and volumes,
 allowing you to run `docker-compose up` again from a clean slate.
 
-## 🔒 Reverse Proxy
+Some Docker images are built locally from a Dockerfile. You can rebuild them with the `--build` flag.
 
-Used for SSL termination. To setup SSL support provide a proper DOMAIN_SUFFIX environment variable and put the certificates to ./data/ssl/ named by the domain name.
+## 🔒 Local Reverse Proxy
+
+The `proxy` service in `docker-compose.yml` is a preconfigured nginx server based on [nginx-proxy](https://hub.docker.com/r/nginxproxy/nginx-proxy).
+
+> nginx-proxy sets up a container running nginx and [docker-gen](https://github.com/nginx-proxy/docker-gen). docker-gen generates reverse proxy configs for nginx and reloads nginx when containers are started and stopped.
+> See [Automated Nginx Reverse Proxy for Docker](http://jasonwilder.com/blog/2014/03/25/automated-nginx-reverse-proxy-for-docker/) for why you might want to use this.
+
+Basically any container with a `VIRTUAL_HOST` environment variable having exposed ports is added to the nginx proxy as a virtual host. For this to work all services are inspected by the `proxy` service via the `/var/run/docker.sock` socket. The nginx proxy then exposes port HTTP/80 and HTTPS/443 to the Docker host on 127.0.0.1 where it reverse proxies all other containers based on the HTTP `Host` header. 
+
+In order to connect to Nextcloud instances `nextcloud`, `nextcloud2` and `nextcloud3` you have to tell your system to resolve their `VIRTUAL_HOST` address to localhost. Any user agent (like your browser) will send the corresponding hostname in the `Host` header to the `proxy` service.
+
+If you have to make your Nextcloud instances available from the Internet during development, make sure to also read [Public Reverse Proxy](#-public-reverse-proxy).
+
+### Resolving Nginx virtual hosts
 
 You might need to add the domains to your `/etc/hosts` file:
 
@@ -107,13 +156,17 @@ You might need to add the domains to your `/etc/hosts` file:
 127.0.0.1 collabora.local
 ```
 
-This is assuming you have set `DOMAIN_SUFFIX=.local`
+This is assuming you have set `DOMAIN_SUFFIX_LOCAL=.local`
 
 You can generate it through:
 
 ```
-awk -v D=.local '/- [A-z0-9]+\${DOMAIN_SUFFIX}/ {sub("\\$\{DOMAIN_SUFFIX\}", D " 127.0.0.1", $2); print $2}' docker-compose.yml
+awk -v D=.local '/- [A-z0-9]+\${DOMAIN_SUFFIX_LOCAL}/ {sub("\\$\{DOMAIN_SUFFIX_LOCAL\}", D " 127.0.0.1", $2); print $2}' docker-compose.yml
 ```
+
+### Local SSL support (optional)
+
+To setup SSL support provide a proper DOMAIN_SUFFIX_LOCAL environment variable and put the certificates to ./data/ssl/ named by the domain name.
 
 You can generate selfsigned certificates using:
 
@@ -122,16 +175,16 @@ cd data/ssl
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout  nextcloud.local.key -out nextcloud.local.crt
 ```
 
-### dnsmasq to resolve wildcard domains
+### dnsmasq to resolve wildcard domains (optional)
 
-Instead of adding the individual container domains to `/etc/hosts` a local dns server like dnsmasq can be used to resolve any domain ending with the configured DOMAIN_SUFFIX in `.env` to localhost.
+Instead of adding the individual container domains to `/etc/hosts` a local dns server like dnsmasq can be used to resolve any domain ending with the configured DOMAIN_SUFFIX_LOCAL in `.env` to localhost.
 
-For dnsmasq adding the following configuration would be sufficient for `DOMAIN_SUFFIX=.local`:
+For dnsmasq adding the following configuration would be sufficient for `DOMAIN_SUFFIX_LOCAL=.local`:
 ```
 address=/.local/127.0.0.1
 ```
 
-### Use valid certificates trusted by your system
+### Use valid certificates trusted by your system (optional)
 
 * Install mkcert https://github.com/FiloSottile/mkcert
 * Go to `data/ssl`
@@ -140,6 +193,57 @@ address=/.local/127.0.0.1
 * `mv nextcloud.local-key.pem nextcloud.local.key`
 * `mv nextcloud.local.pem nextcloud.local.crt`
 * `docker-compose restart proxy`
+
+## 🌍 Public Reverse Proxy
+
+The VO Federation app requires users to authenticate against a Community AAI using OpenID Connect. The authentication flow involves a return URL that needs to be available on the public internet and registered with a Nextcloud instance.
+
+### Word of caution
+
+Exposing your development environment to the internet is generally a bad idea. Only continue if you understand the risks! 
+
+* Lock down user accounts
+* Secret domain names (obfuscation) do not offer any level of protection
+* Only use this setup if you really have to. Ask yourself if you can accomplish the same task locally.
+* Disconnect from the public reverse proxy after your day's work
+* Destroy containers regularly
+
+### Virtual private server
+
+Here are the building blocks for the public reverse proxy:
+
+* Cloud server / VPS with public IP address
+* Public domain and control over DNS records
+* VPN Gateway
+* Nginx reverse proxy
+* Letsencrypt / Certbot for remote SSL termination
+
+The setup allows multiple users (developers) to have any number of Nextcloud instances exposed at the same time, eg.
+
+* Alice's nextcloud.home.arpa is mapped to alice.nextcloud.example.com
+* Alice's nextcloud2.home.arpa is mapped to alice2.nextcloud.example.com
+* Bob's nextcloud.home.arpa is mapped to bob.nextcloud.example.com
+
+The connection from your development machine to the cloud server is established through VPN. The VPN client will create a virtual network interface and will be assigned an IP address on the server network 192.168.254.0/24. Each user wanting to expose their development environment on the public reverse proxy needs to be configured in advance with matching subdomains on the server and home Docker environment.
+
+Locally the environment variables `DOMAIN_SUFFIX_PUBLIC` and `PUBLIC_ALIAS`es control the subdomains that are passed though by the public reverse proxy. 
+
+For the server setup consult the corresponding VPS [README.md](https://github.com/smesterheide/nextcloud-docker-env/tree/app/vo-federation/vps).
+
+### VPN connection
+
+The VPN server will assign static IP addresses to its clients. No default routes will be pushed either (Split tunneling):
+
+```
+192.168.254.1 via 192.168.254.2 dev tun0 
+192.168.254.2 dev tun0 proto kernel scope link src 192.168.254.1 
+```
+
+To connect:
+
+```
+# openvpn sme.ovpn
+```
 
 ## ✉ Mail
 
@@ -169,37 +273,6 @@ Useful commands:
 ```
 docker-compose exec ldap ldapsearch -H 'ldap://localhost' -D "cn=admin,dc=planetexpress,dc=com" -w admin -b "dc=planetexpress,dc=com" "(&(objectclass=inetOrgPerson)(description=*use*))"
 ```
-
-## Collabora
-
-- Make sure to have the collabora hostname setup in your /etc/hosts file: `127.0.0.1 collabora.local`
-- Automatically enable for one of your containers (e.g. the main nextcloud one):
-	- Run `./scripts/enable-collabora nextcloud`
-- Manual setup
-	- Start the Collabora Online server in addition to your other containers `docker-compose up -d collabora`
-	- Make sure you have the richdocuments app cloned to your apps-extra directory and built the frontend code of the app with `npm ci && npm run build`
-	- Enable the app and configure `collabora.local` in the Collabora settings inside of Nextcloud
-
-
-## ONLYOFFICE
-
-- Make sure to have the collabora hostname setup in your /etc/hosts file: `127.0.0.1 onlyoffice.local`
-- Automatically enable for one of your containers (e.g. the main nextcloud one):
-	- Run `./scripts/enable-onlyoffice nextcloud`
-- Manual setup
-	- Start the ONLYOFFICE server in addition to your other containers `docker-compose up -d onlyoffice`
-	- Clone https://github.com/ONLYOFFICE/onlyoffice-nextcloud into your apps directory
-	- Enable the app and configure `onlyoffice.local` in the ONLYOFFICE settings inside of Nextcloud
-
-
-## Antivirus
-
-```bash
-docker-compose up -d proxy nextcloud av
-```
-
-The clanav antivirus will then be exposed as a deamon with host `clam` and
-port 3310.
 
 ## SAML
 
@@ -266,28 +339,6 @@ A simple approach to test environment based SSO with the user_saml app is to use
 </Location>
 ```
 
-## Fulltextsearch
-
-```
-docker-compose up -d elasticsearch elasticsearch-ui
-```
-
-- Address for configuring in Nextcloud: `http://elastic:elastic@elasticsearch:9200`
-- Adress to access elastic search from outside: `http://elastic:elastic@elasticsearch.local`
-- Address for accessing the ui: http://elasticsearch-ui.local/
-
-`sudo sysctl -w vm.max_map_count=262144`
-
-
-
-## Object storage
-
-Primary object storage can be enabled by setting the `PRIMARY=minio` environment variable either in your .env file or in docker-compose.yml for individual containers.
-
-```bash
-docker-composer up proxy nextcloud minio
-```
-
 ## Development
 
 ### OCC
@@ -320,13 +371,46 @@ docker-compose up -d proxy portal gs1 gs2 lookup database-mysql
 
 Users are named the same as the instance name, e.g. gs1, gs2
 
-## Imaginary
+## Changes from upstream juliushaertl/nextcloud-docker-dev
 
-Enable the imaginary server for generating previews
+### Project-level bootstrap.sh
 
-```bash
-docker-composer up proxy nextcloud previews_hpb
-./scripts/enable-preview-imaginary.sh
-```
+The original project comes with two bootstrap scripts. One is mandatory as it is the Docker entrypoint for the Nextcloud instances and manages the initial installation of Nextcloud. The second is a [convenience script](https://github.com/juliushaertl/nextcloud-docker-dev/blob/master/bootstrap.sh) for the user to set up the workspace. The latter was removed and the user is required to follow the manual steps to getting started.
+
+### Nextcloud Docker entrypoint bootstrap.sh
+
+The Nextcloud Docker image is built locally to allow changes to the files added to the image where necessary.
+
+The Nextcloud containers rely on `nginx-proxy` environment variable `VIRTUAL_HOST` for their unique instance names. Adding a public reverse proxy to the mix, the `VIRTUAL_HOST` variable now takes up multiple hostnames separated by comma.
+
+Therefore a new variable `NEXTCLOUD_VIRTUAL_HOST` was introduced which replaces occurences of `VIRTUAL_HOST` in the Docker entrypoint `bootstrap.sh`.
+
+### Disabled Containers
+
+* Postgres
+  * _disabled in favor of MySQL_
+* Blackfire.io
+  * Blackfire APM. Observability from Development to Production
+  * Monitor, profile and test your application 
+  * _installed with Dockerfile; currently disabled_
+* notify_push
+  * Update notifications for nextcloud clients
+* Global Scale, Lookup Server
+
+### Removed Containers
+
+* HAProxy
+  * Round robin HTTP load balancer for nextcloud, nextcloud2
+* Nextcloud stable releases other than stable24
+* SMB
+* Collabora, OpenOffice
+* MinIO
+  * MinIO offers high-performance, S3 compatible object storage
+* Elasticsearch
+* ClamAV
+* imaginary
+  * Fast HTTP microservice written in Go for high-level image processing backed
+
+
 
 

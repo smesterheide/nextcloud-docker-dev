@@ -1,7 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2181
 
-DOMAIN_SUFFIX=".$(echo "$VIRTUAL_HOST" | cut -d '.' -f2-)"
+DOMAIN_SUFFIX_LOCAL=".$(echo "${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST}" | cut -d '.' -f2-)"
 
 indent() { sed 's/^/   /'; }
 
@@ -38,8 +38,8 @@ configure_gs() {
 	OCC config:system:set lookup_server --value ""
 
 	get_protocol
-	LOOKUP_SERVER="${PROTOCOL}://lookup${DOMAIN_SUFFIX}/index.php"
-	MASTER_SERVER="${PROTOCOL}://portal${DOMAIN_SUFFIX}"
+	LOOKUP_SERVER="${PROTOCOL}://lookup${DOMAIN_SUFFIX_LOCAL}/index.php"
+	MASTER_SERVER="${PROTOCOL}://portal${DOMAIN_SUFFIX_LOCAL}"
 
 	if [ "$GS_MODE" = "master" ]
 	then
@@ -49,7 +49,7 @@ configure_gs() {
 		OCC config:system:set gss.jwt.key --value 'random-key'
 		OCC config:system:set gss.mode --value 'master'
 		OCC config:system:set gss.master.admin 0 --value 'admin'
-		OCC config:system:set gss.master.csp-allow 0 --value "*${DOMAIN_SUFFIX}"
+		OCC config:system:set gss.master.csp-allow 0 --value "*${DOMAIN_SUFFIX_LOCAL}"
 	fi
 
 	if [ "$GS_MODE" = "slave" ]
@@ -120,11 +120,11 @@ configure_ssl_proxy() {
 	if [[ "$PROTOCOL" == "https" ]]; then
 		echo "🔑 SSL proxy available, configuring proxy settings"
 		OCC config:system:set overwriteprotocol --value https
-		OCC config:system:set overwrite.cli.url --value "https://$VIRTUAL_HOST"
+		OCC config:system:set overwrite.cli.url --value "https://${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST}"
 	else
 		echo "🗝 No SSL proxy, removing overwriteprotocol"
 		OCC config:system:delete overwriteprotocol
-		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST"
+		OCC config:system:set overwrite.cli.url --value "http://${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST}"
 
 	fi
 }
@@ -137,7 +137,7 @@ configure_add_user() {
 
 
 install() {
-	DBNAME=$(echo "$VIRTUAL_HOST" | cut -d '.' -f1)
+	DBNAME=$(echo "${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST}" | cut -d '.' -f1)
 	echo "database name will be $DBNAME"
 
 	if [ "$SQL" = "mysql" ]
@@ -166,7 +166,7 @@ install() {
 	update_permission
 
 	USER="admin"
-	PASSWORD="admin"
+	PASSWORD="${NEXTCLOUD_ADMIN_PASSWORD:-admin}"
 
 	echo "🔧 Starting auto installation"
 	if [ "$SQL" = "oci" ]; then
@@ -196,7 +196,7 @@ install() {
 	# Setup domains
 	# localhost is at index 0 due to the installation
 	INTERNAL_IP_ADDRESS=$(ip a show type veth | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*")
-	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${VIRTUAL_HOST} ${INTERNAL_IP_ADDRESS} localhost"
+	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST} ${INTERNAL_IP_ADDRESS} localhost"
 	if [ -n "${NEXTCLOUD_TRUSTED_DOMAINS+x}" ]; then
 		echo "🔧 setting trusted domains…"
 		NC_TRUSTED_DOMAIN_IDX=1
@@ -218,7 +218,7 @@ install() {
 	# [ -e /var/www/html/nc-dev-autosetup.sh ] && bash /var/www/html/nc-dev-autosetup.sh
 
 	echo "🔧 Setting up users and LDAP in the background"
-	INSTANCENAME=$(echo "$VIRTUAL_HOST" | cut -d '.' -f1)
+	INSTANCENAME=$(echo "${NEXTCLOUD_VIRTUAL_HOST:-$VIRTUAL_HOST}" | cut -d '.' -f1)
 	configure_add_user "$INSTANCENAME" &
 	configure_add_user user1 &
 	configure_add_user user2 &

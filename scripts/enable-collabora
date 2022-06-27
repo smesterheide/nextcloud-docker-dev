@@ -14,11 +14,11 @@ function occ() {
 
 source .env
 
-echo "Setting up Collabora with collabora$DOMAIN_SUFFIX on $CONTAINER"
+echo "Setting up Collabora with collabora$DOMAIN_SUFFIX_LOCAL on $CONTAINER"
 docker-compose up -d collabora
 occ app:enable richdocuments
-occ config:app:set richdocuments wopi_url --value="http://collabora${DOMAIN_SUFFIX}"
-occ config:app:set richdocuments public_wopi_url --value="http://collabora${DOMAIN_SUFFIX}"
+occ config:app:set richdocuments wopi_url --value="http://collabora${DOMAIN_SUFFIX_LOCAL}"
+occ config:app:set richdocuments public_wopi_url --value="http://collabora${DOMAIN_SUFFIX_LOCAL}"
 occ config:system:set allow_local_remote_servers --value true --type bool
-occ config:system:set gs.trustedHosts 0 --value "*${DOMAIN_SUFFIX}"
+occ config:system:set gs.trustedHosts 0 --value "*${DOMAIN_SUFFIX_LOCAL}"
 occ richdocuments:activate-config
