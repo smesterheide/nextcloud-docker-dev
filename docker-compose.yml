@@ -76,18 +76,20 @@ services:
     environment:
       SQL: ${SQL:-mysql}
       NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
-      NEXTCLOUD_AUTOINSTALL_APPS:
+      NEXTCLOUD_AUTOINSTALL_APPS: "${NEXTCLOUD_AUTOINSTALL_APPS} vo_federation"
       WITH_REDIS: "YES"
       VIRTUAL_HOST: "nextcloud${DOMAIN_SUFFIX}"
       ADDITIONAL_APPS_PATH:
-      NEXTCLOUD_TRUSTED_DOMAINS:
+      NEXTCLOUD_TRUSTED_DOMAINS: "nextcloud.local nextcloud2.local nextcloud3.local"
       BLACKFIRE_CLIENT_ID:
       BLACKFIRE_CLIENT_TOKEN:
       PRIMARY: ${PRIMARY:-local}
       PHP_XDEBUG_MODE: ${PHP_XDEBUG_MODE:-develop}
+      PROTOCOL: https
     volumes:
       - '${REPO_PATH_SERVER}:/var/www/html'
       - '${REPO_PATH_SERVER}/apps-extra:/var/www/html/apps-extra'
+      - '${STABLE_ROOT_PATH}/../../vo_federation:/var/www/html/apps-extra/vo_federation'
       - '${ADDITIONAL_APPS_PATH:-./data/apps-extra}:/var/www/html/apps-shared'
       - data:/var/www/html/data
       - config:/var/www/html/config
@@ -95,6 +97,9 @@ services:
       - ./data/skeleton/:/skeleton
       - ./data/additional.config.php:/var/www/html/config/additional.config.php:ro
       - ./data/shared:/shared
+      - ./data/ssl/rootCA.pem:/usr/local/share/ca-certificates/rootCA.crt
+      - ./docker/configs/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./docker/configs/cron.conf:/etc/nc-cron.conf
     depends_on:
       - database-${SQL:-mysql}
       - redis
@@ -109,9 +114,14 @@ services:
       SQL: 'mysql'
       VIRTUAL_HOST: "nextcloud2${DOMAIN_SUFFIX}"
       PHP_XDEBUG_MODE: ${PHP_XDEBUG_MODE:-develop}
+      NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
+      NEXTCLOUD_AUTOINSTALL_APPS: "${NEXTCLOUD_AUTOINSTALL_APPS} vo_federation"
+      NEXTCLOUD_TRUSTED_DOMAINS: "nextcloud.local nextcloud2.local nextcloud3.local"
+      PROTOCOL: https      
     volumes:
       - '${REPO_PATH_SERVER}:/var/www/html'
       - '${REPO_PATH_SERVER}/apps-extra:/var/www/html/apps-extra'
+      - '${STABLE_ROOT_PATH}/../../vo_federation:/var/www/html/apps-extra/vo_federation'
       - '${ADDITIONAL_APPS_PATH:-./data/apps-extra}:/var/www/html/apps-shared'
       - data2:/var/www/html/data
       - config2:/var/www/html/config
@@ -119,6 +129,9 @@ services:
       - ./data/skeleton/:/skeleton
       - ./data/additional.config.php:/var/www/html/config/additional.config.php:ro
       - ./data/shared:/shared
+      - ./data/ssl/rootCA.pem:/usr/local/share/ca-certificates/rootCA.crt
+      - ./docker/configs/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./docker/configs/cron.conf:/etc/nc-cron.conf
     ports:
       - "${IP_BIND:-127.0.0.1}:${PORTBASE:-800}1:80"
     depends_on:
@@ -135,9 +148,14 @@ services:
       SQL: ${SQL:-mysql}
       VIRTUAL_HOST: "nextcloud3${DOMAIN_SUFFIX}"
       PHP_XDEBUG_MODE: ${PHP_XDEBUG_MODE:-develop}
+      NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
+      NEXTCLOUD_AUTOINSTALL_APPS: "${NEXTCLOUD_AUTOINSTALL_APPS} vo_federation"
+      NEXTCLOUD_TRUSTED_DOMAINS: "nextcloud.local nextcloud2.local nextcloud3.local"
+      PROTOCOL: https      
     volumes:
       - '${REPO_PATH_SERVER}:/var/www/html'
       - '${REPO_PATH_SERVER}/apps-extra:/var/www/html/apps-extra'
+      - '${STABLE_ROOT_PATH}/../../vo_federation:/var/www/html/apps-extra/vo_federation'
       - '${ADDITIONAL_APPS_PATH:-./data/apps-extra}:/var/www/html/apps-shared'
       - data3:/var/www/html/data
       - config3:/var/www/html/config
@@ -145,6 +163,9 @@ services:
       - ./data/skeleton/:/skeleton
       - ./data/additional.config.php:/var/www/html/config/additional.config.php:ro
       - ./data/shared:/shared
+      - ./data/ssl/rootCA.pem:/usr/local/share/ca-certificates/rootCA.crt
+      - ./docker/configs/php/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
+      - ./docker/configs/cron.conf:/etc/nc-cron.conf
     depends_on:
       - database-${SQL:-mysql}
       - redis
@@ -925,7 +946,7 @@ services:
     expose:
       - 8080
     volumes:
-      - ./docker/configs/keycloak:/opt/keycloak/data/import
+      - ./docker/configs/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     command: start-dev --import-realm
     environment:
       VIRTUAL_HOST: "keycloak${DOMAIN_SUFFIX}"

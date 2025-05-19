@@ -4,6 +4,8 @@
 
 Nextcloud's development environment using Docker Compose providing a large variety of services for Nextcloud server and app development and testing.
 
+Adapted for [VO Federation app](https://github.com/nextcloud/vo_federation) development.
+
 ⚠ **DO NOT USE THIS IN PRODUCTION** Various settings in this setup are considered insecure and default passwords and secrets are used all over the place
 
 - ☁ Nextcloud containers for running multiple versions
@@ -31,7 +33,7 @@ In detail explanation of the setup and its features and configuration options ca
 
 To start the setup run the following commands to clone the repository and bootstrap the setup. This will prepare your setup and clone the Nextcloud server repository and required apps into the `workspace` folder.
 ```bash
-git clone https://github.com/juliusknorr/nextcloud-docker-dev
+git clone https://github.com/smesterheide/nextcloud-docker-dev
 cd nextcloud-docker-dev
 ./bootstrap.sh
 ```
@@ -39,6 +41,8 @@ cd nextcloud-docker-dev
 Depending on your docker version you will need to use `docker-compose` instead of `docker compose` in the following commands.
 
 This may take some time depending on your internet connection speed.
+
+**See [VO Federation app](#vo-federation-app) before continuing**
 
 Once done you can start the Nextcloud container using:
 ```bash
@@ -59,6 +63,37 @@ You can then access your Nextcloud instance at [http://nextcloud.local](http://n
 > git fetch origin
 > ```
 
+#### VO Federation app
+
+**Nextcloud Server patches**
+
+Checkout the Nextcloud Server version that has support for the federated group share type:
+
+```
+cd workspace/server
+git remote add publicplan https://github.com/publicplan/nextcloud-server.git
+git fetch publicplan
+git checkout -t publicplan/vo-federation
+```
+
+**Clone the app**
+
+From your parent directory clone the `vo_federation` app repository:
+
+```
+git clone -b develop https://github.com/nextcloud/vo_federation
+```
+
+**SSL server certificates**
+
+Install [mkcert](https://github.com/FiloSottile/mkcert), go to `data/ssl` and generate the server cerfificates:
+
+```
+CAROOT=$(pwd) mkcert -cert-file nextcloud.local.crt -key-file nextcloud.local.key nextcloud.local
+CAROOT=$(pwd) mkcert -cert-file nextcloud2.local.crt -key-file nextcloud2.local.key nextcloud2.local
+CAROOT=$(pwd) mkcert -cert-file nextcloud3.local.crt -key-file nextcloud3.local.key nextcloud3.local
+CAROOT=$(pwd) mkcert -cert-file keycloak.local.crt -key-file keycloak.local.key keycloak.local
+```
 
 ### Standalone containers
 
